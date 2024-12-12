@@ -1,150 +1,100 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.drools.decisiontable.parser.csv;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 
- *         a CSV line, with all the normal CSV features.
- */
 public class CsvLineParser {
-    private ICsvParser lineParser;
+    private final CsvStrategy parser;
 
     public CsvLineParser() {
-        this.lineParser = new CsvParserImpl();
+        this.parser = new DefaultCsvStrategy();
     }
 
-    /**
-     * Use the current lineParser implementation to return a CSV line as a List
-     * of cells. (Strings).
-     */
-    public List<String> parse(final CharSequence line) {
-        return this.lineParser.parse( line.toString() );
+    public CsvLineParser(char delimiter) {
+        this.parser = new DefaultCsvStrategy(delimiter);
     }
 
-    /**
-     * This is insurance incase I need to replace it with more complex Csv
-     * handlers in the future.
-     */
-    static interface ICsvParser {
-        public List<String> parse(String line);
+    public List<String> parse(CharSequence input) {
+        return parser.parseLine(input.toString());
     }
 
-    /**
-     * Parse comma-separated values (CSV), a common Windows file format. Sample
-     * input: "LU",86.25,"11/4/1998","2:19PM",+4.0625
-     * <p>
-     * Inner logic adapted from a C++ original that was Copyright (C) 1999
-     * Lucent Technologies Excerpted from 'The Practice of Programming' by Brian
-     * W. Kernighan and Rob Pike.
-     * <p>
-     * Included by permission of the http://tpop.awl.com/ web site, which says:
-     * "You may use this code for any purpose, as long as you leave the
-     * copyright notice and book citation attached." I have done so.
-     * 
-     *         readability)
-     */
-    static class CsvParserImpl
-        implements
-        ICsvParser {
+    interface CsvStrategy {
+        List<String> parseLine(String input);
+    }
 
-        public static final char DEFAULT_SEP = ',';
+    static class DefaultCsvStrategy implements CsvStrategy {
+        private final char delimiter;
 
-        /** Construct a CSV parser, with the default separator (','). */
-        public CsvParserImpl() {
-            this( CsvParserImpl.DEFAULT_SEP );
+        public DefaultCsvStrategy() {
+            this(',');
         }
 
-        /**
-         * Construct a CSV parser with a given separator.
-         * 
-         * @param sep
-         *            The single char for the separator (not a list of separator
-         *            characters)
-         */
-        public CsvParserImpl(final char sep) {
-            this.fieldSep = sep;
+        public DefaultCsvStrategy(char delimiter) {
+            this.delimiter = delimiter;
         }
 
-        /** The fields in the current String */
-        protected List<String> list = new ArrayList<>();
-
-        /** the separator char for this parser */
-        protected char fieldSep;
-
-        /**
-         * parse: break the input String into fields
-         * 
-         * @return java.util.Iterator containing each field from the original as
-         *         a String, in order.
-         */
-        public List<String> parse(final String line) {
-            final StringBuilder sb = new StringBuilder();
-            this.list.clear(); // recycle to initial state
-            int i = 0;
-
-            if ( line.length() == 0 ) {
-                this.list.add( line );
-                return this.list;
+        @Override
+        public List<String> parseLine(String input) {
+            List<String> fields = new ArrayList<>();
+            if (input == null || input.isEmpty()) {
+                fields.add("");
+                return fields;
             }
 
-            do {
-                sb.setLength( 0 );
-                if ( i < line.length() && line.charAt( i ) == '"' ) {
-                    i = advQuoted( line,
-                                                                                       sb,
-                                                                                       ++i ); // skip
-                } else {
-                    i = advPlain( line,
-                                       sb,
-                                       i );
+            StringBuilder currentField = new StringBuilder();
+            boolean inQuotes = false;
+            boolean isEscaped = false;
+
+            for (int i = 0; i < input.length(); i++) {
+                char currentChar = input.charAt(i);
+
+                if (isEscaped) {
+                    currentField.append(currentChar);
+                    isEscaped = false;
+                    continue;
                 }
-                this.list.add( sb.toString() );
-                i++;
-            } while ( i < line.length() );
 
-            return this.list;
-        }
-
-        /** advQuoted: quoted field; return index of next separator */
-        protected int advQuoted(final String s,
-                                final StringBuilder sb,
-                                final int i) {
-            int j;
-            final int len = s.length();
-            for ( j = i; j < len; j++ ) {
-                if ( s.charAt( j ) == '"' && j + 1 < len ) {
-                    if ( s.charAt( j + 1 ) == '"' ) {
-                        j++; // skip escape char
-                    } else if ( s.charAt( j + 1 ) == this.fieldSep ) { // next delimeter
-                        j++; // skip end quotes
-                        break;
+                if (currentChar == '"') {
+                    if (inQuotes && i + 1 < input.length() && input.charAt(i + 1) == '"') {
+                        // Handle escaped quotes
+                        isEscaped = true;
+                    } else {
+                        inQuotes = !inQuotes;
                     }
-                } else if ( s.charAt( j ) == '"' && j + 1 == len ) { // end quotes at end of line
-                    break; // done
+                    continue;
                 }
-                sb.append( s.charAt( j ) ); // regular character.
+
+                if (currentChar == delimiter && !inQuotes) {
+                    fields.add(currentField.toString());
+                    currentField.setLength(0);
+                    continue;
+                }
+
+                currentField.append(currentChar);
             }
-            return j;
+
+            // Add the last field
+            fields.add(currentField.toString());
+
+            return fields;
         }
-
-        /** advPlain: unquoted field; return index of next separator */
-        protected int advPlain(final String s,
-                               final StringBuilder sb,
-                               final int i) {
-            int j;
-
-            j = s.indexOf( this.fieldSep,
-                           i ); // look for separator
-            if ( j == -1 ) { // none found
-                sb.append( s.substring( i ) );
-                return s.length();
-            } else {
-                sb.append( s.substring( i,
-                                        j ) );
-                return j;
-            }
-        }
-
     }
 }
