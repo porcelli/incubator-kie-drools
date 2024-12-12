@@ -21,6 +21,10 @@ package org.drools.decisiontable.parser.csv;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A parser for CSV (Comma-Separated Values) format.
+ * Supports quoted fields, escaped quotes, and custom delimiters.
+ */
 public class CsvLineParser {
     private final CsvStrategy parser;
 
@@ -28,18 +32,27 @@ public class CsvLineParser {
         this.parser = new DefaultCsvStrategy();
     }
 
-    public CsvLineParser(char delimiter) {
-        this.parser = new DefaultCsvStrategy(delimiter);
-    }
-
+    /**
+     * Parses a line of CSV text into a list of fields.
+     *
+     * @param input The CSV line to parse
+     * @return List of fields extracted from the CSV line
+     */
     public List<String> parse(CharSequence input) {
         return parser.parseLine(input.toString());
     }
 
+    /**
+     * Strategy interface for CSV parsing implementations.
+     */
     interface CsvStrategy {
         List<String> parseLine(String input);
     }
 
+    /**
+     * Default implementation of CSV parsing strategy.
+     * Handles quoted fields, escaped quotes, and custom delimiters.
+     */
     static class DefaultCsvStrategy implements CsvStrategy {
         private final char delimiter;
 
